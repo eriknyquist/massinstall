@@ -1,0 +1,70 @@
+#!/bin/bash
+
+# Reads filenames from the passed configuration file and calls "install"
+# for each one. The configuration file should contain newline-seperated
+# entries, where each line looks like this:
+# 
+#   /src/path /dest/path 666
+#
+# Where "/src/path" is the path to the source file, "/dest/path" is the
+# destination path, and the final value is the optional file mode. If not
+# specified, the file mode will be set to 666 (read and write for all users).
+# Empty lines and lines beginnning with a '#' are ignored
+
+INSTALL=/usr/bin/install
+
+if [ $# -ne 1 ]
+then
+    echo "Usage: $0 <file.conf>"
+    exit 1
+fi
+
+file="$1"
+
+function conf_err() {
+    echo "Error in $file, line $1: $2"
+    echo "No files have been installed."
+    exit 1
+}
+
+linenum=0
+cmds=()
+
+# Read conf. file and generate shell commands to install files
+while read -r line || [[ -n "$line" ]]
+do
+    linenum=$((linenum + 1))
+
+    # Skip blank lines and comments in config. file
+    if [ -z "$line" ] || [ ${line:0:1} == "#" ]
+    then
+        continue
+    fi
+
+    num_fields=$(echo "$line" | awk "{print NF}")
+
+    # Check for valid # of fields on each line
+    if [ $num_fields -lt 2 ]
+    then
+        conf_err $linenum "at least a source and destination path are required"
+    elif [ $num_fields -gt 3 ]
+    then
+        conf_err $linenum "a maximum of 3 fields were expected"
+    fi
+
+    if [ $num_fields -eq 3 ]
+    then
+        args=$(echo "$line" | awk '{printf "-m %s %s %s", $3, $1, $2}')
+    else
+        args=$(echo "$line" | awk '{printf "-m 666 %s %s", $1, $2}')
+    fi
+
+    cmds+=("$INSTALL $args")
+done < "$file"
+
+# Run shell commands to install files
+for cmd in "${cmds[@]}"
+do
+    echo "executing: $cmd"
+    $cmd
+done
